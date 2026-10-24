@@ -1,0 +1,80 @@
+name: Build apps
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter build apk --release
+      - run: mv build/app/outputs/flutter-apk/app-release.apk HeyCode-AI-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: HeyCode-AI-android.apk
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter build windows --release
+      - run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath HeyCode-AI-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: HeyCode-AI-windows.zip
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: HeyCode AI v1.0.${{ github.run_number }}
+          make_latest: true
+          body: |
+            Download the file for your device:
+            - Android: HeyCode-AI-android.apk (allow installing from unknown sources when asked)
+            - Windows: HeyCode-AI-windows.zip (unzip, then run heycode_ai.exe)
+          files: |
+            HeyCode-AI-android.apk
+            HeyCode-AI-windows.zip
